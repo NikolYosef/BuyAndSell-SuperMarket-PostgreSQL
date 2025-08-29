@@ -1,0 +1,127 @@
+CREATE TABLE Users (
+    name VARCHAR(50) PRIMARY KEY,
+    password VARCHAR(50) NOT NULL
+);
+
+
+CREATE TABLE Buyer (
+    name VARCHAR(50) PRIMARY KEY,
+    street VARCHAR(100),
+    buildingNumber INT,
+    city VARCHAR(50),
+    country VARCHAR(50),
+    FOREIGN KEY (name) REFERENCES Users(name)
+);
+
+
+CREATE TABLE Seller (
+    name VARCHAR(50) PRIMARY KEY,
+    FOREIGN KEY (name) REFERENCES Users(name)
+);
+
+
+CREATE TABLE ShoppingCart (
+    buyerName VARCHAR(50) PRIMARY KEY,
+    buyDate DATE,
+    total_price NUMERIC(8,2),
+    FOREIGN KEY (buyerName) REFERENCES Buyer(name)
+);
+
+
+CREATE TABLE Product (
+    Pnum SERIAL PRIMARY KEY,
+    Pname VARCHAR(100) NOT NULL,
+    price NUMERIC(8,2) NOT NULL,
+    category VARCHAR(20) CHECK (category IN ('kids', 'electronics', 'office', 'clothing')),
+    sellerName VARCHAR(50) NOT NULL,
+    FOREIGN KEY (sellerName) REFERENCES Seller(name)
+);
+
+
+CREATE TABLE SpecialPackedProduct (
+    Pnum INT PRIMARY KEY,
+    packing_price NUMERIC(8,2) NOT NULL,
+    FOREIGN KEY (Pnum) REFERENCES Product(Pnum)
+);
+
+
+CREATE TABLE OrderHistory (
+    Onum SERIAL PRIMARY KEY,
+    cartBuyerName VARCHAR(50) NOT NULL,
+    buyDate DATE,
+    FOREIGN KEY (cartBuyerName) REFERENCES ShoppingCart(buyerName)
+);
+
+
+SELECT * FROM Product;
+SELECT * FROM ShoppingCart;
+SELECT * FROM Seller;
+SELECT * FROM Buyer;
+SELECT * FROM Users;
+SELECT * FROM SpecialPackedProduct;
+SELECT * FROM OrderHistory; -- delete
+
+ALTER TABLE Product
+ALTER COLUMN category TYPE TEXT;
+
+INSERT INTO Users (name, password) VALUES
+('nikol', 'pass123'),
+('roni', 'pass456'),
+('dan', 'pass789');
+
+INSERT INTO Buyer (name, street, buildingNumber, city, country) VALUES
+('dan', 'Herzl', 12, 'Haifa', 'Israel'),
+('nikol', 'Alexcander', 6, 'Tel Aviv', 'Israel');
+
+INSERT INTO Seller (name) VALUES
+('roni');
+
+INSERT INTO Product (Pname, price, category, sellerName) VALUES
+('Laptop', 2999.99, 'electronics', 'roni'),
+('T-shirt', 49.99, 'clothing', 'roni'),
+('Notebook', 15.50, 'office', 'roni');
+
+INSERT INTO SpecialPackedProduct (Pnum, packing_price) VALUES
+(2, 5.00);
+
+DROP TABLE OrderHistory;
+
+--remove buyername as pk from cart
+ALTER TABLE ShoppingCart
+DROP CONSTRAINT shoppingcart_pkey;
+
+--add cartID as pk at cart
+ALTER TABLE ShoppingCart
+ADD COLUMN cartID SERIAL PRIMARY KEY;
+
+--add if paid to the cart
+ALTER TABLE ShoppingCart
+ADD COLUMN ifPaid BOOLEAN DEFAULT false;
+
+--a table linking a product to a shopping cart
+CREATE TABLE CartProduct (
+    cartID INT,
+    Pnum INT,
+    quantity INT DEFAULT 1,
+    PRIMARY KEY (cartID, Pnum),
+    FOREIGN KEY (cartID) REFERENCES ShoppingCart(cartID),
+    FOREIGN KEY (Pnum) REFERENCES Product(Pnum)
+);
+
+SELECT * FROM CartProduct;
+
+--add an empty cart to nikol
+INSERT INTO ShoppingCart (buyerName, total_price, ifPaid, buyDate)
+VALUES ('nikol', 0.0, false, NULL);
+
+-- nikol wants to add her cart(1) product number 3 (notebook) 
+INSERT INTO CartProduct (cartID, Pnum, quantity)
+VALUES (1, 3, 1);
+
+SELECT * FROM Buyer WHERE name = 'nikol';
+
+--add an empty cart to dan
+INSERT INTO ShoppingCart (buyerName, total_price, ifPaid, buyDate)
+VALUES ('dan', 0.0, false, NULL);
+
+
