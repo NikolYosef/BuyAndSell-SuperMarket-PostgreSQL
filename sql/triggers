@@ -1,0 +1,214 @@
+ -- check if the cart already paid
+CREATE OR REPLACE FUNCTION prevent_add_to_paid_cart()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM ShoppingCart
+        WHERE cartID = NEW.cartID AND ifPaid = true
+    ) THEN
+        RAISE EXCEPTION 'Cannot add product: Cart has already been paid.';
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER check_cart_before_insert
+BEFORE INSERT ON CartProduct
+FOR EACH ROW
+EXECUTE FUNCTION prevent_add_to_paid_cart();
+
+-- check - we can't add product to a cart that was paid
+INSERT INTO CartProduct (cartID, Pnum, quantity)
+VALUES (1, 2, 1);
+
+
+
+-- It is not allowed to change the quantity or delete a product from a paid cart.
+CREATE OR REPLACE FUNCTION prevent_modify_paid_cart()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM ShoppingCart
+        WHERE cartID = OLD.cartID AND ifPaid = true
+    ) THEN
+        RAISE EXCEPTION 'Cannot modify a paid cart.';
+    END IF;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER prevent_update_on_paid_cart
+BEFORE UPDATE ON CartProduct
+FOR EACH ROW
+EXECUTE FUNCTION prevent_modify_paid_cart();
+
+CREATE TRIGGER prevent_delete_on_paid_cart
+BEFORE DELETE ON CartProduct
+FOR EACH ROW
+EXECUTE FUNCTION prevent_modify_paid_cart();
+
+
+
+-- Prevents the creation of a duplicate cart for a buyer who has not yet paid.
+CREATE OR REPLACE FUNCTION prevent_multiple_open_carts()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM ShoppingCart
+        WHERE buyerName = NEW.buyerName AND ifPaid = false
+    ) THEN
+        RAISE EXCEPTION 'Buyer already has an open cart.';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER check_open_cart_before_insert
+BEFORE INSERT ON ShoppingCart
+FOR EACH ROW
+EXECUTE FUNCTION prevent_multiple_open_carts();
+
+
+
+-- calculate total price
+CREATE OR REPLACE FUNCTION update_cart_total_price()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE ShoppingCart
+    SET total_price = (
+       SELECT COALESCE(SUM(
+            p.price + COALESCE(spp.packing_price, 0)
+        ), 0)
+        FROM CartProduct cp
+        JOIN Product p ON cp.Pnum = p.Pnum
+        LEFT JOIN SpecialPackedProduct spp ON cp.Pnum = spp.Pnum
+        WHERE cp.cartID = NEW.cartID
+    )
+    WHERE cartID = NEW.cartID;
+
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+--triger after INSERT
+CREATE TRIGGER trg_update_total_price_after_insert
+AFTER INSERT ON CartProduct
+FOR EACH ROW
+EXECUTE FUNCTION update_cart_total_price();
+
+--triger after UPDATE
+CREATE TRIGGER trg_update_total_price_after_update
+AFTER UPDATE ON CartProduct
+FOR EACH ROW
+EXECUTE FUNCTION update_cart_total_price();
+
+-- triger after DELETE
+CREATE TRIGGER trg_update_total_price_after_delete
+AFTER DELETE ON CartProduct
+FOR EACH ROW
+EXECUTE FUNCTION update_cart_total_price();
+
+
+
+SELECT * FROM CartProduct WHERE Pnum = 4;
+SELECT * FROM Product WHERE Pnum = 4;
+
+INSERT INTO Users (name, password) VALUES
+('avi', 'pass9090');
+
+INSERT INTO Seller (name) VALUES
+('avi');
+
+INSERT INTO Product (Pname, price, category, sellerName) VALUES
+('ipad', 4999.99, 'electronics', 'roni'),
+('ball', 10, 'kids', 'avi');
+
+SELECT * FROM Product;
+SELECT * FROM ShoppingCart;
+SELECT * FROM Seller;
+SELECT * FROM Buyer;
+SELECT * FROM Users;
+SELECT * FROM SpecialPackedProduct;
+SELECT * FROM CartProduct;
+
+
+-- temporary turn off the triger
+ALTER TABLE CartProduct DISABLE TRIGGER prevent_delete_on_paid_cart;
+
+DELETE FROM CartProduct;
+
+-- turn on the triger
+ALTER TABLE CartProduct ENABLE TRIGGER prevent_delete_on_paid_cart;
+
+DELETE FROM ShoppingCart;
+
+DELETE FROM SpecialPackedProduct;
+
+DELETE FROM Product WHERE pname = 'dall';
+
+ALTER SEQUENCE product_pnum_seq RESTART WITH 1;
+ALTER SEQUENCE shoppingcart_cartid_seq RESTART WITH 1;
+
+DELETE FROM Product WHERE pname = 'ball';
+
+INSERT INTO Product (Pname, price, category, sellerName) VALUES
+('pen', 8, 'OFFICE', 'roni');
+
+DROP TABLE Product;
+DROP TABLE SpecialPackedProduct;
+DROP TABLE CartProduct;
+
+CREATE TABLE Product (
+    Pnum SERIAL PRIMARY KEY,
+    Pname VARCHAR(100) NOT NULL,
+    price NUMERIC(8,2) NOT NULL,
+    category VARCHAR(20) CHECK (category IN ('KIDS', 'ELECTRONICS', 'OFFICE', 'CLOTHING')),
+    sellerName VARCHAR(50) NOT NULL,
+    FOREIGN KEY (sellerName) REFERENCES Seller(name)
+);
+
+CREATE TABLE CartProduct (
+    cartID INT,
+    Pnum INT,
+    quantity INT DEFAULT 1,
+    PRIMARY KEY (cartID, Pnum),
+    FOREIGN KEY (cartID) REFERENCES ShoppingCart(cartID),
+    FOREIGN KEY (Pnum) REFERENCES Product(Pnum)
+);
+
+CREATE TABLE SpecialPackedProduct (
+    Pnum INT PRIMARY KEY,
+    packing_price NUMERIC(8,2) NOT NULL,
+    FOREIGN KEY (Pnum) REFERENCES Product(Pnum)
+);
+
+ALTER SEQUENCE shoppingcart_cartid_seq RESTART WITH 1;
+
+DELETE FROM ShoppingCart;
+
+DELETE FROM ShoppingCart WHERE cartid = 4;
+
+--after deleting a cart we need to run this - we didn't run
+SELECT setval('shoppingcart_cartid_seq', (
+    SELECT MAX(cartID) FROM ShoppingCart
+));
+
+DELETE FROM CartProduct WHERE cartid = 3 or cartid = 4;
+DELETE FROM Buyer WHERE name = 'ilan';
+DELETE FROM Seller WHERE name = 'miki' or name = 'meni';
+
+SELECT * FROM Product;
+SELECT * FROM ShoppingCart;
+SELECT * FROM Seller;
+SELECT * FROM Buyer;
+SELECT * FROM Users;
+SELECT * FROM SpecialPackedProduct;
+SELECT * FROM CartProduct;
+
+INSERT INTO CartProduct (cartid, pnum, quantity) VALUES
+(4, 2, 1);
+DELETE FROM CartProduct WHERE pnum = 2;
+
+INSERT INTO Product (Pname, price, category, sellerName) VALUES
+('pen', 8, 'office', 'roni')
