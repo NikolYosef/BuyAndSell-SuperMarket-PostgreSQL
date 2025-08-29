@@ -1,0 +1,29 @@
+--show which product nikol puts on her cart
+SELECT p.Pname, p.price, cp.quantity
+FROM ShoppingCart sc
+JOIN CartProduct cp ON sc.cartID = cp.cartID
+JOIN Product p ON cp.Pnum = p.Pnum
+WHERE sc.buyerName = 'nikol';
+
+
+--Making a payment manually
+UPDATE ShoppingCart
+SET ifPaid = true,
+    buyDate = CURRENT_DATE,
+    total_price = 15.50 -- notebook cost 15.50
+WHERE cartID = 1;
+
+
+--not good - add a product to a cart that was paid
+INSERT INTO CartProduct (cartID, Pnum, quantity)
+VALUES (1, 2, 1);
+
+
+-- delete the product from the cart that was paid
+DELETE FROM CartProduct
+WHERE cartID = 1 AND Pnum = 2;
+
+
+-- show only cartID = 1 in CartProduct
+SELECT * FROM CartProduct WHERE cartID = 1;
+
